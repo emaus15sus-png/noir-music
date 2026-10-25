@@ -31,3 +31,6 @@ APK: `app/build/outputs/apk/release/app-release.apk`
    The first time, accept the "Allow USB debugging" prompt on the TV.
 
 If YouTube changes something and songs stop loading, bump the `NewPipeExtractor` version in `app/build.gradle.kts` and rebuild.
+
+## License
+GPL-3.0, see [LICENSE](LICENSE). Noir uses [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor), which is also GPL-3.0.
