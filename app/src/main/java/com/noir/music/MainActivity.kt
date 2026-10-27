@@ -49,6 +49,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -68,10 +69,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
@@ -139,14 +142,9 @@ private fun autoMood() = Mood.auto(hour(), Taste::moodPicks)
 private fun startMood(mood: Mood, play: (List<Song>, Int) -> Unit, prompt: String? = null, extra: String = "") {
     appScope.launch {
         S.status = "Making your ${mood.label.lowercase()} mix…"
-        val songs = moodMix(mood, extra)
+        val (name, songs) = buildMix(mood, prompt, extra)
         if (songs.isEmpty()) { S.status = "Couldn't load songs. Check the internet and try again."; return@launch }
-        Taste.pickMood(Mood.slot(hour()), mood)
-        S.status = if (prompt == null) "Playing your ${mood.label.lowercase()} mix" else {
-            val name = Taste.freeName("${mood.label} · ${prompt.trim().take(24)}")
-            Taste.setPlaylist(name, songs)
-            "Saved \"$name\" to your library"
-        }
+        S.status = if (name == null) "Playing your ${mood.label.lowercase()} mix" else "Saved \"$name\" to your library"
         play(songs, 0)
     }
 }
@@ -161,6 +159,7 @@ private class NowPlaying {
     var playing by mutableStateOf(false)
     var queue by mutableStateOf(emptyList<Song>())
     var index by mutableIntStateOf(0)
+    var newQueues by mutableIntStateOf(0) // counts queues started from the TV or the PC remote
 }
 
 @Composable
@@ -176,6 +175,9 @@ private fun nowPlaying(p: Player?): NowPlaying {
         }
         val l = object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) = sync()
+            override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED && item != null) np.newQueues++
+            }
         }
         sync()
         p.addListener(l)
@@ -192,6 +194,11 @@ private fun Noir(player: Player?) {
     val play: (List<Song>, Int) -> Unit = { list, i ->
         player?.run { setMediaItems(list.map { it.toItem() }, i, 0); prepare(); play() }
     }
+    // Any new queue, from the TV or the PC remote, opens Now Playing
+    LaunchedEffect(np.newQueues) { if (np.newQueues > 0) full = true }
+    // Like a video app: no screensaver (and so no Fire TV sleep) while music plays
+    val view = LocalView.current
+    DisposableEffect(np.playing) { view.keepScreenOn = np.playing; onDispose {} }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Accent, background = Color.Black, surface = Color.Black)) {
         Surface(Modifier.fillMaxSize(), color = Color.Black, contentColor = Color.White) {
@@ -588,32 +595,47 @@ private fun FullPlayer(s: Song, np: NowPlaying, player: Player) {
     // The focused button disappears when switching views, so put focus somewhere sensible
     LaunchedEffect(queue) { runCatching { (if (queue) queueFocus else playFocus).requestFocus() } }
     BackHandler(queue) { queue = false }
-    Row(
-        Modifier.fillMaxSize().background(Color.Black).padding(horizontal = 80.dp, vertical = 48.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Crossfade(s.thumb, label = "art") { Art(it, 340.dp, 18.dp) }
-        Spacer(Modifier.width(64.dp))
-        if (queue) Queue(np, player, queueFocus, Modifier.weight(1f).fillMaxHeight())
-        else Column(Modifier.weight(1f)) {
-            Crossfade(s, label = "meta") {
-                Column {
-                    Text(it.title, fontSize = 34.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(it.artist, fontSize = 20.sp, color = Dim, maxLines = 1, modifier = Modifier.padding(top = 6.dp))
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        // A 24 px copy of the cover stretched over the screen reads as a soft blur (real blur needs Android 12)
+        Crossfade(s.thumb, label = "ambient") { url ->
+            AsyncImage(
+                // Own cache key, or Coil reuses the sharp full-size cover already in memory
+                ImageRequest.Builder(LocalContext.current).data(url).size(24).memoryCacheKey("$url#ambient").build(), null,
+                Modifier.fillMaxSize().graphicsLayer { alpha = 0.6f }, contentScale = ContentScale.Crop,
+            )
+        }
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.25f), Color.Black.copy(alpha = 0.85f)))))
+        Box(Modifier.align(Alignment.TopEnd).padding(top = 20.dp, end = 48.dp)) { Clock() }
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = 80.dp, vertical = 48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Crossfade(s.thumb, label = "art") { Art(it, 340.dp, 18.dp) }
+            Spacer(Modifier.width(64.dp))
+            if (queue) Queue(np, player, queueFocus, Modifier.weight(1f).fillMaxHeight())
+            else Column(Modifier.weight(1f)) {
+                Crossfade(s, label = "meta") {
+                    Column {
+                        Text(it.title, fontSize = 34.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(it.artist, fontSize = 20.sp, color = Dim, maxLines = 1, modifier = Modifier.padding(top = 6.dp))
+                    }
                 }
-            }
-            Spacer(Modifier.height(36.dp))
-            Progress(player, Modifier.height(4.dp).clip(RoundedCornerShape(2.dp)), showTime = true)
-            Spacer(Modifier.height(24.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconBtn(if (liked) Ic.heart else Ic.heartOutline, 30.dp, tint = if (liked) Accent else Color.White) {
-                    Taste.toggleLike(s)
+                Spacer(Modifier.height(36.dp))
+                Progress(player, Modifier.height(4.dp).clip(RoundedCornerShape(2.dp)), showTime = true)
+                Spacer(Modifier.height(24.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconBtn(if (liked) Ic.heart else Ic.heartOutline, 30.dp, tint = if (liked) Accent else Color.White) {
+                        Taste.toggleLike(s)
+                    }
+                    Spacer(Modifier.width(24.dp))
+                    Controls(player, np.playing, 40.dp, playFocus)
+                    Spacer(Modifier.width(24.dp))
+                    IconBtn(Ic.add, 30.dp) { S.menu = playlistMenu(s) }
+                    IconBtn(Ic.queue, 30.dp) { queue = true }
                 }
-                Spacer(Modifier.width(24.dp))
-                Controls(player, np.playing, 40.dp, playFocus)
-                Spacer(Modifier.width(24.dp))
-                IconBtn(Ic.add, 30.dp) { S.menu = playlistMenu(s) }
-                IconBtn(Ic.queue, 30.dp) { queue = true }
+                np.queue.getOrNull(np.index + 1)?.let {
+                    Text("Up next  ·  ${it.title} — ${it.artist}", color = Dim, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 28.dp))
+                }
             }
         }
     }

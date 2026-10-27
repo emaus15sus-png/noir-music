@@ -33,6 +33,7 @@ class PlaybackService : MediaSessionService() {
     private var current: Song? = null
     private var startedAt = 0L
     private var extending = false
+    private var remote: Remote? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -46,7 +47,8 @@ class PlaybackService : MediaSessionService() {
             )
             // Start after 0.5 s of audio instead of the default 2.5 s
             .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(15_000, 50_000, 500, 1_000).build())
-            .setHandleAudioBecomingNoisy(true)
+            // No pause when the audio output changes: switching the monitor's HDMI input counts as one
+            .setHandleAudioBecomingNoisy(false)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
 
@@ -74,6 +76,7 @@ class PlaybackService : MediaSessionService() {
             ): ListenableFuture<MutableList<MediaItem>> =
                 Futures.immediateFuture(mediaItems.map { it.buildUpon().setUri(songUri(it.mediaId)).build() }.toMutableList())
         }).build()
+        remote = Remote(this, player).also { it.start() }
     }
 
     /** Autoplay: keep at least two songs ahead by appending the current song's radio, ranked by taste. */
@@ -105,6 +108,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         scope.cancel()
+        remote?.stop()
         session.player.release()
         session.release()
         super.onDestroy()

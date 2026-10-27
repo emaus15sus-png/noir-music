@@ -73,6 +73,19 @@ enum class Mood(val label: String, val words: String, val from: Long, val to: Lo
     }
 }
 
+/**
+ * A [mood] mix ready to play, or empty if nothing loaded. Counts as a pick for the Mood DJ to learn from.
+ * With a [prompt] it is also saved as a playlist named after it; the name is returned.
+ */
+suspend fun buildMix(mood: Mood, prompt: String? = null, extra: String = ""): Pair<String?, List<Song>> {
+    val songs = moodMix(mood, extra)
+    if (songs.isEmpty()) return null to songs
+    Taste.pickMood(Mood.slot(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)), mood)
+    val name = prompt?.let { Taste.freeName("${mood.label} · ${it.trim().take(24)}") }
+    name?.let { Taste.setPlaylist(it, songs) }
+    return name to songs
+}
+
 /** Builds a mix for [mood]: your top artists in that mood, the mood in general, and any extra words you said. */
 suspend fun moodMix(mood: Mood, extra: String = ""): List<Song> = coroutineScope {
     val queries = buildList {
