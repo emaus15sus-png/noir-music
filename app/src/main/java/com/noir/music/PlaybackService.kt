@@ -59,7 +59,7 @@ class PlaybackService : MediaSessionService() {
                 current = item?.toSong()
                 startedAt = now
                 extendIfNeeded(player)
-                if (player.hasNextMediaItem()) Yt.prefetch(player.getMediaItemAt(player.nextMediaItemIndex).mediaId)
+                prefetchNext(player)
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -88,9 +88,14 @@ class PlaybackService : MediaSessionService() {
             val queued = List(player.mediaItemCount) { player.getMediaItemAt(it).mediaId }.toSet()
             val next = runCatching { withContext(Dispatchers.IO) { Taste.rank(Yt.radio(seed)) } }.getOrDefault(emptyList())
             player.addMediaItems(next.filter { it.id !in queued }.take(10).map { it.toItem() })
+            prefetchNext(player) // a single song had no next one to look up when it started
             extending = false
             if (player.playerError != null) skipBroken(player)
         }
+    }
+
+    private fun prefetchNext(player: Player) {
+        if (player.hasNextMediaItem()) Yt.prefetch(player.getMediaItemAt(player.nextMediaItemIndex).mediaId)
     }
 
     private fun skipBroken(player: Player) {

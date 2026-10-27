@@ -75,6 +75,7 @@ class Remote(private val ctx: Context, private val player: Player) {
         "GET /search" -> {
             val songs = runCatching { Yt.search(u.q("q").take(100)) }.getOrDefault(emptyList())
             songs.forEach { found[it.id] = it }
+            songs.take(3).forEach { Yt.prefetch(it.id) } // the PC can't hover-prefetch, so warm up the likely picks
             json(JSONArray(songs.map { it.json() }))
         }
         "GET /playlists" -> json(JSONArray(Taste.playlists.map { (name, l) ->
