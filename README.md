@@ -10,25 +10,26 @@ Ad-free music player for Fire TV. The catalogue is YouTube Music (via NewPipeExt
 - **Mood DJ:** on Home, "How are you feeling?" takes what you type, or say with the Fire TV keyboard's mic. It reads a mood from it (English and Hinglish words, including "not happy" and "khush nahi"), builds a mix from your favourite artists in that mood, saves it to your Library and plays it. "Picked for your morning/evening…" guesses your mood from the time of day and learns from the moods you choose at that time. The Moods row plays a mix instantly. It all runs on the TV, with no cloud AI and no account.
 - **Fast start:** a song's stream is looked up as soon as focus rests on it, and the next song in the queue is looked up ahead of time, so OK starts playback in well under a second. The player starts after 0.5 s of audio instead of 2.5 s.
 - **Now Playing:** any new queue, started on the TV or from the PC, opens a full-screen player with a blurred backdrop from the cover, the clock and "Up next". The screen stays on while music plays, so no screensaver and no Fire TV sleep. Playback no longer pauses when the HDMI output changes, for example when you switch the monitor's input.
-- **Noir Remote (PC):** Spotify Connect-style control over your Wi-Fi. The TV app serves a remote page on port 8686 with now playing, controls, seek, like, Up next (jump or remove), search and play, playlists, and the Mood DJ. Install the Windows launcher once with `powershell -ExecutionPolicy Bypass -File pc\NoirRemote.ps1 -Install`, then open **Noir Remote** from the Desktop or Start menu. It finds the TV by itself and opens in its own window. Any browser works too: `http://<TV-IP>:8686`. Noir must be open or playing on the TV. Anyone on your Wi-Fi can use the remote, but other websites can't (commands need an `X-Noir` header).
+- **Noir Remote (PC):** Spotify Connect-style control over your Wi-Fi. The TV app serves a remote page on port 8686 with now playing, controls, seek, like, Up next (jump or remove), search and play, playlists, and the Mood DJ. Install the Windows launcher once with `powershell -ExecutionPolicy Bypass -File pc\NoirRemote.ps1 -Install`, then open **Noir Remote** from the Desktop or Start menu. It finds the TV by itself and opens in its own window. Any browser works too: `http://<TV-IP>:8686`. Noir must be open or playing on the TV. Anyone on your Wi-Fi can use the remote, but other websites can't. Commands need an `X-Noir` header, and requests must address the TV by its IP, which blocks "DNS rebinding" tricks.
 - **Top bar:** logo, a digits-only clock, and a Restart button that relaunches the app if anything gets stuck.
 - **Logo:** `app/src/main/res/drawable-nodpi/` holds the icon and Fire TV banner. Regenerate them with `powershell -File tools\logo.ps1 app\src\main\res\drawable-nodpi`.
 - **Recommendations:** an artist gets +1 when you finish a song, +3 when you like one, and −1 when you skip within 30 s. A song you skip twice is never suggested again. "Made for you" mixes the radios of your liked songs and recent listens, ranked by these scores.
 
 ## Build
+You need JDK 17 (set `JAVA_HOME`) and the Android SDK (set `ANDROID_HOME`, or put `sdk.dir=<path>` in `local.properties`). The Gradle wrapper downloads the right Gradle version by itself.
 ```
-set JAVA_HOME=D:\AI Projects\toolchain\jdk\jdk-17.0.20.1+1
-"D:\AI Projects\toolchain\gradle-8.9\bin\gradle.bat" assembleRelease
+gradlew assembleRelease
+gradlew testReleaseUnitTest
 ```
-APK: `app/build/outputs/apk/release/app-release.apk`
+On macOS or Linux, use `./gradlew`. The APK ends up in `app/build/outputs/apk/release/app-release.apk`. `YtTest.liveSearchRadioAndStream` talks to YouTube, so it needs internet.
 
 ## Install on Fire TV
 1. Fire TV: Settings → My Fire TV → About → click the device name 7 times to unlock Developer options. Then turn on **ADB debugging** and **Apps from Unknown Sources**.
 2. Find the TV's IP address under Settings → My Fire TV → About → Network.
-3. On the PC, run:
+3. On the PC, run `adb` from the Android SDK's `platform-tools` folder:
    ```
-   "D:\AI Projects\toolchain\sdk\platform-tools\adb.exe" connect <TV-IP>
-   "D:\AI Projects\toolchain\sdk\platform-tools\adb.exe" install -r app\build\outputs\apk\release\app-release.apk
+   adb connect <TV-IP>
+   adb install -r app/build/outputs/apk/release/app-release.apk
    ```
    The first time, accept the "Allow USB debugging" prompt on the TV.
 

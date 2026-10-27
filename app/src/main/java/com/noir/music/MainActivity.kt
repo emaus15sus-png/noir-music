@@ -300,7 +300,12 @@ private fun Home(play: (List<Song>, Int) -> Unit) {
         launch { if (S.forYou == null) S.forYou = withContext(Dispatchers.IO) { runCatching { recommend() }.getOrDefault(emptyList()) } }
         // Re-guess the mood each visit: the app may stay open from evening into night
         val m = autoMood()
-        if (m != S.autoMood || S.moodMix == null) { S.autoMood = m; S.moodMix = null; S.moodMix = runCatching { moodMix(m) }.getOrDefault(emptyList()) }
+        if (m != S.autoMood || S.moodMix == null) {
+            S.autoMood = m
+            S.moodMix = null
+            // withContext rethrows if you left Home mid-load, so moodMix stays null and reloads next visit instead of sticking empty
+            S.moodMix = withContext(Dispatchers.IO) { runCatching { moodMix(m) }.getOrDefault(emptyList()) }
+        }
     }
     val playlists = Taste.playlists
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -373,11 +378,11 @@ private suspend fun recommend(): List<Song> = coroutineScope {
 
 @Composable
 private fun Search(play: (List<Song>, Int) -> Unit) {
-    val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     val go = {
         val q = S.query.trim()
-        if (q.isNotEmpty()) scope.launch {
+        // appScope, not this screen's: leaving the tab mid-search would leave "Searching…" up forever
+        if (q.isNotEmpty()) appScope.launch {
             S.results = null
             S.results = withContext(Dispatchers.IO) { runCatching { Yt.search(q) }.getOrDefault(emptyList()) }
         }

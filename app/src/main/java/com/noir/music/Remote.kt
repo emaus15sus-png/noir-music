@@ -61,8 +61,7 @@ class Remote(private val ctx: Context, private val player: Player) {
             if (!head.contains("\r\n\r\n")) return@use write(it, text(431, "request too large"))
             val lines = head.substringBefore("\r\n\r\n").split("\r\n")
             val (method, target) = lines[0].split(" ").takeIf { p -> p.size == 3 } ?: return@use write(it, text(400, "bad request"))
-            val allowed = lines.any { h -> h.startsWith("x-noir:", ignoreCase = true) }
-            val reply = if (method == "POST" && !allowed) text(403, "missing X-Noir header") else route(method, Uri.parse("http://tv$target"))
+            val reply = refusal(lines)?.let { why -> text(403, why) } ?: route(method, Uri.parse("http://tv$target"))
             write(it, reply)
         }
     }
@@ -137,4 +136,19 @@ class Remote(private val ctx: Context, private val player: Player) {
     companion object {
         const val PORT = 8686
     }
+}
+
+private val ipHost = Regex("""^(\d{1,3}(\.\d{1,3}){3}|localhost|\[[0-9a-fA-F:.]+])(:\d+)?$""")
+
+/**
+ * Why a request (its request line and headers) is refused, or null if it may proceed.
+ * - Host must be an IP or localhost. A website using "DNS rebinding" points its own domain at the TV,
+ *   so its requests arrive with that domain as Host; the real remote always uses the TV's IP.
+ * - Commands (POST) need X-Noir, which a browser won't send from another website's page.
+ */
+internal fun refusal(lines: List<String>): String? {
+    fun header(name: String) = lines.drop(1).firstOrNull { it.startsWith("$name:", ignoreCase = true) }?.substringAfter(':')?.trim()
+    if (!ipHost.matches(header("host").orEmpty())) return "open the remote by the TV's IP address"
+    if (lines[0].startsWith("POST ") && header("x-noir") == null) return "missing X-Noir header"
+    return null
 }
