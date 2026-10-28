@@ -28,7 +28,7 @@ enum class Mood(val label: String, val words: String, val from: Long, val to: Lo
         private val filler = setOf(
             "i", "im", "i'm", "am", "feel", "feeling", "feels", "like", "want", "wanna", "to", "some", "song", "songs", "music",
             "play", "me", "my", "a", "the", "so", "very", "really", "today", "mood", "is", "and", "for", "with", "of", "in", "it",
-            "kinda", "bit", "little", "something", "kuch", "hai", "hoon", "hu", "mujhe", "mera", "sunao", "gaane", "gane", "gana",
+            "kinda", "bit", "little", "something", "tonight", "now", "right", "just", "currently", "lately", "abhi", "aaj", "kuch", "hai", "hoon", "hu", "mujhe", "mera", "sunao", "gaane", "gane", "gana",
         ) + negations
 
         /** Strongest mood in [text] (null if none) and the words that were not about mood, e.g. "90s bollywood". */
@@ -74,28 +74,18 @@ enum class Mood(val label: String, val words: String, val from: Long, val to: Lo
 }
 
 /**
- * A [mood] mix ready to play, or empty if nothing loaded. Counts as a pick for the Mood DJ to learn from.
- * With a [prompt] it is also saved as a playlist named after it; the name is returned.
+ * Builds a mix for [mood]: your top [artists] in that mood, the mood in general, and any extra words you said.
+ * [rank] orders and filters the candidates by the listener's taste (the TV and the PC keep theirs differently).
  */
-suspend fun buildMix(mood: Mood, prompt: String? = null, extra: String = ""): Pair<String?, List<Song>> {
-    val songs = moodMix(mood, extra)
-    if (songs.isEmpty()) return null to songs
-    Taste.pickMood(Mood.slot(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)), mood)
-    val name = prompt?.let { Taste.freeName("${mood.label} · ${it.trim().take(24)}") }
-    name?.let { Taste.setPlaylist(it, songs) }
-    return name to songs
-}
-
-/** Builds a mix for [mood]: your top artists in that mood, the mood in general, and any extra words you said. */
-suspend fun moodMix(mood: Mood, extra: String = ""): List<Song> = coroutineScope {
+suspend fun moodMix(mood: Mood, extra: String, artists: List<String>, rank: (List<Song>) -> List<Song>): List<Song> = coroutineScope {
     val queries = buildList {
         if (extra.isNotBlank()) add("$extra ${mood.words} songs")
-        Taste.topArtists(3).forEach { add("$it ${mood.words} songs") }
+        artists.forEach { add("$it ${mood.words} songs") }
         add("${mood.words} songs")
     }
     fun search(q: String) = runCatching { Yt.search(q) }.getOrDefault(emptyList())
     // The first YouTube Music search of a session sets up its client; parallel cold searches race on that and fail
     val first = withContext(Dispatchers.IO) { search(queries.first()) }
     val found = listOf(first) + queries.drop(1).map { q -> async(Dispatchers.IO) { search(q) } }.awaitAll()
-    Taste.rank(Mood.interleave(found), perArtist = 4).take(25)
+    rank(Mood.interleave(found)).take(25)
 }

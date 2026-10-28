@@ -304,7 +304,7 @@ private fun Home(play: (List<Song>, Int) -> Unit) {
             S.autoMood = m
             S.moodMix = null
             // withContext rethrows if you left Home mid-load, so moodMix stays null and reloads next visit instead of sticking empty
-            S.moodMix = withContext(Dispatchers.IO) { runCatching { moodMix(m) }.getOrDefault(emptyList()) }
+            S.moodMix = withContext(Dispatchers.IO) { runCatching { tvMix(m) }.getOrDefault(emptyList()) }
         }
     }
     val playlists = Taste.playlists

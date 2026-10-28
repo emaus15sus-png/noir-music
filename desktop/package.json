@@ -1,0 +1,61 @@
+{
+  "name": "noir-desktop",
+  "version": "1.0.0",
+  "description": "Ad-free music for your PC, with your Fire TV as a device",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "node scripts/dist.mjs"
+  },
+  "keywords": [],
+  "type": "module",
+  "productName": "Noir",
+  "license": "GPL-3.0-only",
+  "devDependencies": {
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0"
+  },
+  "allowScripts": {
+    "electron-winstaller": false
+  },
+  "author": "Noir",
+  "build": {
+    "appId": "com.noir.desktop",
+    "productName": "Noir",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "ui/**",
+      "build/icon.ico",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-res",
+        "to": ".",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Noir",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "asar": false
+  }
+}

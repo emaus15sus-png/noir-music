@@ -88,7 +88,11 @@ class Remote(private val ctx: Context, private val player: Player) {
         // Queue positions must still point after the current song (they can shift between a poll and a click)
         "POST /jump" -> ok { u.at()?.let { player.seekTo(it, 0) } }
         "POST /remove" -> ok { u.at()?.let { player.removeMediaItem(it) } }
-        "POST /play" -> found[u.q("id")]?.let { s -> ok { start(listOf(s)) } } ?: text(404, "search for the song first")
+        // A song the remote searched here, or one the PC app hands over with its details (Spotify Connect-style)
+        "POST /play" -> (found[u.q("id")] ?: u.song())?.let { s ->
+            ok { start(listOf(s)); u.q("pos").toLongOrNull()?.let { player.seekTo(it.coerceAtLeast(0)) } }
+        } ?: text(400, "bad song")
+        "POST /add" -> u.song()?.let { s -> ok { player.addMediaItem(s.toItem()) } } ?: text(400, "bad song")
         "POST /playlist" -> Taste.playlists[u.q("name")]?.takeIf { it.isNotEmpty() }?.let { l -> ok { start(l) } } ?: text(404, "no such playlist")
         "POST /mood" -> mood(u.q("text").trim().take(200), save = u.q("save") != "0")
         else -> text(404, "not found")
@@ -119,6 +123,7 @@ class Remote(private val ctx: Context, private val player: Player) {
     }
 
     private fun Uri.q(key: String) = getQueryParameter(key).orEmpty()
+    private fun Uri.song() = remoteSong(q("id"), q("t"), q("a"), q("i"), q("d"))
     private fun Uri.at() = q("i").toIntOrNull()?.takeIf { it > player.currentMediaItemIndex && it < player.mediaItemCount }
 
     /** ExoPlayer may only be touched on the main thread. */
@@ -136,6 +141,19 @@ class Remote(private val ctx: Context, private val player: Player) {
     companion object {
         const val PORT = 8686
     }
+}
+
+private val videoId = Regex("[A-Za-z0-9_-]{11}")
+private val coverHost = Regex("""^https://([a-z0-9-]+\.)*(googleusercontent\.com|ytimg\.com)/""")
+
+/**
+ * A song sent by another device on the Wi-Fi, or null if anything looks wrong. The cover must come from
+ * YouTube's image servers, so a device can't make the TV fetch arbitrary addresses.
+ */
+internal fun remoteSong(id: String, title: String, artist: String, thumb: String, duration: String): Song? {
+    if (!videoId.matches(id) || title.isBlank() || title.length > 200 || artist.length > 200) return null
+    if (thumb.isNotEmpty() && (thumb.length > 1000 || !coverHost.containsMatchIn(thumb))) return null
+    return Song(id, title, artist, thumb, duration.toLongOrNull()?.coerceIn(0, 86_400) ?: 0)
 }
 
 private val ipHost = Regex("""^(\d{1,3}(\.\d{1,3}){3}|localhost|\[[0-9a-fA-F:.]+])(:\d+)?$""")

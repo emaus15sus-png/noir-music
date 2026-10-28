@@ -7,6 +7,7 @@ class MoodTest {
     @Test
     fun readsMoodFromWhatYouSay() {
         assertEquals(Mood.Happy to "", Mood.detect("I'm feeling really happy today"))
+        assertEquals(Mood.Sad to "", Mood.detect("feeling lonely tonight")) // time words are not search words
         assertEquals(Mood.Sad, Mood.detect("not happy at all").first)
         assertEquals(Mood.Sad, Mood.detect("main khush nahi hoon").first)
         assertEquals(Mood.Sad, Mood.detect("feeling lonely and I miss her").first)

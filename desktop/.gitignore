@@ -1,0 +1,6 @@
+node_modules/
+dist/
+dist-res/
+engine/build/
+# build/ holds the app icon (the root .gitignore drops build folders)
+!/build/

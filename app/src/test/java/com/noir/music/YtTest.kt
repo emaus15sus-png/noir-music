@@ -47,5 +47,11 @@ class YtTest {
         ).execute()
         println("stream HTTP ${r.code}")
         assertEquals(206, r.code)
+        // Seeking: YouTube refuses mid-file ranges for clients without a proof-of-origin token
+        val mid = OkHttpClient().newCall(
+            okhttp3.Request.Builder().url(url).header("Range", "bytes=1000000-1004095").header("User-Agent", "AndroidXMedia3/1.4.1").build()
+        ).execute()
+        println("seek HTTP ${mid.code}")
+        assertEquals(206, mid.code)
     }
 }
